@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lottery Picker</title>
+    <title>Lottery Picker - Auto Sync</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -119,9 +119,15 @@
         .sync-status {
             text-align: center;
             font-size: 0.8rem;
-            color: #6bcb77;
             margin-top: 5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: inline-block;
         }
+        .sync-status.success { color: #6bcb77; background: rgba(107,203,119,0.1); }
+        .sync-status.syncing { color: #4d96ff; background: rgba(77,150,255,0.1); }
+        .sync-status.error { color: #ff6b6b; background: rgba(255,107,107,0.1); }
+        .sync-status.idle { color: #8892b0; background: rgba(136,146,176,0.05); }
         
         .ball-container {
             display: grid;
@@ -194,6 +200,10 @@
             100% { transform: scale(1.8) rotate(0deg); box-shadow: 0 0 60px rgba(255,215,0,0.5); }
         }
         .ball.dimmed { opacity: 0.15; transform: scale(0.8); filter: grayscale(0.9); }
+        .ball.fixed-first { 
+            border: 3px solid #ffd700; 
+            box-shadow: 0 0 30px rgba(255,215,0,0.5);
+        }
         
         .controls {
             display: flex;
@@ -264,6 +274,10 @@
         .winner-payment { font-size: 10px; margin-top: 5px; padding: 2px 12px; border-radius: 12px; background: rgba(0,0,0,0.3); }
         .winner-payment.verified { color: #6bcb77; }
         .winner-payment.pending { color: #888; }
+        .winner-card.first-place .winner-ball { 
+            border: 3px solid #ffd700;
+            box-shadow: 0 0 40px rgba(255,215,0,0.5);
+        }
         
         .progress-container {
             width: 100%;
@@ -314,7 +328,27 @@
         }
         .badge.verified { color: #6bcb77; background: rgba(107,203,119,0.15); }
         .badge.pending { color: #888; background: rgba(136,136,136,0.15); }
+        .badge.first { color: #ffd700; background: rgba(255,215,0,0.15); }
         .empty-message { color: #444; text-align: center; padding: 10px; }
+        
+        .auto-sync-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #8892b0;
+            font-size: 0.75rem;
+        }
+        .auto-sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #6bcb77;
+            animation: pulseDot 2s ease-in-out infinite;
+        }
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
         
         @media (max-width: 600px) {
             .container { padding: 15px; }
@@ -335,10 +369,13 @@
 <body>
     <div class="container">
         <h1>🎰 Lottery Picker</h1>
-        <p class="subtitle">Google Sheets + Telegram Mini App</p>
+        <p class="subtitle">Auto-Sync with Google Sheets • 1st Pick Fixed</p>
         
         <div class="header">
-            <div></div>
+            <div class="auto-sync-indicator">
+                <span class="auto-sync-dot"></span>
+                Auto-Sync Active
+            </div>
             <div class="round-box">
                 <div class="round-label">Round</div>
                 <div class="round-number" id="roundNumber">#1</div>
@@ -358,6 +395,9 @@
                 <div class="legend-circle verified-legend"></div>
                 <span>Verified ✅</span>
             </div>
+            <div class="legend-item" style="border:2px solid #ffd700;padding:2px 10px;border-radius:20px;">
+                <span style="color:#ffd700;">⭐ Fixed 1st</span>
+            </div>
         </div>
         
         <div class="upload-section">
@@ -370,7 +410,10 @@
                     <div class="stat-item pending">⏳ <span id="pendingDisplay">0</span></div>
                 </div>
             </div>
-            <div class="sync-status" id="syncStatus">📤 Ready to sync with Google Sheets</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px;margin-top:5px;">
+                <span class="sync-status idle" id="syncStatus">📤 Auto-sync enabled</span>
+                <span style="color:#555;font-size:0.7rem;">Syncing every 30s</span>
+            </div>
         </div>
         
         <div class="ball-container" id="ballContainer"></div>
@@ -383,7 +426,6 @@
         
         <div class="controls">
             <button class="btn btn-primary" id="pickBtn" disabled>🎲 Draw Winners</button>
-            <button class="btn btn-success" id="syncBtn" disabled>📤 Sync to Sheets</button>
             <button class="btn btn-danger" id="clearBtn">🗑️ Clear</button>
         </div>
         
@@ -401,6 +443,7 @@
         // CONFIGURATION
         // ============================================
         const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbwgI3WYQK6dBb-xaggW_6f_e_853bKxNIcRSaASRCVRj9VTlOZEIZoDD4upp-clJuiB/exec";
+        const AUTO_SYNC_INTERVAL = 3000; // 3 seconds
         
         // ============================================
         // MAIN APP
@@ -415,13 +458,14 @@
                 this.intervalId = null;
                 this.progressId = null;
                 this.ballPositions = [];
+                this.syncTimer = null;
+                this.firstPickFixed = true;
                 this.init();
             }
             
             init() {
                 document.getElementById('excelFile').addEventListener('change', (e) => this.handleFileUpload(e));
                 document.getElementById('pickBtn').addEventListener('click', () => this.startDraw());
-                document.getElementById('syncBtn').addEventListener('click', () => this.syncToSheets());
                 document.getElementById('clearBtn').addEventListener('click', () => this.clearAll());
                 
                 this.createPlaceholderBalls();
@@ -430,6 +474,9 @@
                 
                 // Load from Google Sheets on startup
                 this.loadFromSheets();
+                
+                // Start auto-sync
+                this.startAutoSync();
                 
                 // Setup Telegram
                 this.setupTelegram();
@@ -443,7 +490,6 @@
                     Telegram.WebApp.ready();
                     Telegram.WebApp.expand();
                     
-                    // Send data back to Telegram
                     window.sendToTelegram = function(data) {
                         try {
                             Telegram.WebApp.sendData(JSON.stringify(data));
@@ -455,11 +501,31 @@
             }
             
             // ============================================
+            // AUTO-SYNC
+            // ============================================
+            startAutoSync() {
+                // Clear any existing timer
+                if (this.syncTimer) {
+                    clearInterval(this.syncTimer);
+                }
+                
+                // Sync immediately
+                setTimeout(() => this.loadFromSheets(), 1000);
+                
+                // Then sync every 30 seconds
+                this.syncTimer = setInterval(() => {
+                    this.loadFromSheets();
+                }, AUTO_SYNC_INTERVAL);
+                
+                console.log('🔄 Auto-sync started (every 30s)');
+            }
+            
+            // ============================================
             // GOOGLE SHEETS - LOAD DATA
             // ============================================
             async loadFromSheets() {
                 try {
-                    document.getElementById('statusText').textContent = '🔄 Loading from Google Sheets...';
+                    this.setSyncStatus('syncing', '🔄 Syncing with Google Sheets...');
                     
                     const response = await fetch(GOOGLE_SHEETS_API);
                     const result = await response.json();
@@ -474,59 +540,51 @@
                         this.updateStats();
                         this.renderBalls();
                         document.getElementById('pickBtn').disabled = false;
-                        document.getElementById('syncBtn').disabled = false;
-                        document.getElementById('statusText').textContent = `✅ Loaded ${this.participants.length} participants from Google Sheets`;
+                        document.getElementById('statusText').textContent = `✅ Loaded ${this.participants.length} participants from Google Sheets (Auto-sync)`;
                         document.getElementById('statusText').style.color = '#6bcb77';
+                        this.setSyncStatus('success', `✅ Synced ${this.participants.length} participants`);
                     } else {
-                        document.getElementById('statusText').textContent = '📊 Upload Excel file or sync with Google Sheets';
-                        document.getElementById('statusText').style.color = '#8892b0';
+                        this.setSyncStatus('idle', '📤 Waiting for data...');
                     }
                 } catch(error) {
                     console.error('Error loading from sheets:', error);
-                    document.getElementById('statusText').textContent = '❌ Error loading from Google Sheets';
-                    document.getElementById('statusText').style.color = '#ff6b6b';
+                    this.setSyncStatus('error', '❌ Sync error');
                 }
             }
             
             // ============================================
             // GOOGLE SHEETS - SAVE WINNERS
             // ============================================
-            async syncToSheets() {
-                if (this.selectedWinners.length === 0) {
-                    alert('No winners to sync! Draw winners first.');
-                    return;
-                }
-                
+            async saveWinnersToSheets(winners, round) {
                 try {
-                    document.getElementById('statusText').textContent = '🔄 Saving to Google Sheets...';
-                    document.getElementById('statusText').style.color = '#4d96ff';
+                    this.setSyncStatus('syncing', '🔄 Saving winners...');
                     
                     const response = await fetch(GOOGLE_SHEETS_API, {
                         method: 'POST',
                         body: JSON.stringify({
                             action: 'save_winners',
-                            winners: this.selectedWinners,
-                            round: this.round - 1
+                            winners: winners,
+                            round: round
                         })
                     });
                     
                     const result = await response.json();
                     
                     if (result.success) {
-                        document.getElementById('statusText').textContent = '✅ Winners saved to Google Sheets!';
-                        document.getElementById('statusText').style.color = '#6bcb77';
-                        document.getElementById('syncBtn').textContent = '✅ Synced!';
-                        setTimeout(() => {
-                            document.getElementById('syncBtn').textContent = '📤 Sync to Sheets';
-                        }, 2000);
+                        this.setSyncStatus('success', `✅ Winners saved (Round ${round})`);
                     } else {
                         throw new Error(result.error || 'Unknown error');
                     }
                 } catch(error) {
-                    console.error('Error syncing:', error);
-                    document.getElementById('statusText').textContent = '❌ Error saving to Google Sheets';
-                    document.getElementById('statusText').style.color = '#ff6b6b';
+                    console.error('Error saving winners:', error);
+                    this.setSyncStatus('error', '❌ Save error');
                 }
+            }
+            
+            setSyncStatus(type, message) {
+                const el = document.getElementById('syncStatus');
+                el.className = `sync-status ${type}`;
+                el.textContent = message;
             }
             
             // ============================================
@@ -569,9 +627,9 @@
                         this.updateStats();
                         this.renderBalls();
                         document.getElementById('pickBtn').disabled = false;
-                        document.getElementById('syncBtn').disabled = false;
                         document.getElementById('statusText').textContent = `✅ ${this.participants.length} participants loaded from Excel`;
                         document.getElementById('statusText').style.color = '#6bcb77';
+                        this.setSyncStatus('success', `✅ ${this.participants.length} loaded from Excel`);
                         
                     } catch(error) {
                         alert('Error reading Excel file.');
@@ -633,14 +691,13 @@
             }
             
             // ============================================
-            // DRAW WINNERS
+            // DRAW WINNERS - FIXED 1ST PICK
             // ============================================
             startDraw() {
                 if (this.isSpinning || this.participants.length < 3) return;
                 
                 this.isSpinning = true;
                 document.getElementById('pickBtn').disabled = true;
-                document.getElementById('syncBtn').disabled = true;
                 document.getElementById('selectedDisplay').classList.remove('active');
                 document.getElementById('selectedDisplay').innerHTML = '';
                 
@@ -648,7 +705,8 @@
                 this.balls.forEach(ball => {
                     ball.className = ball.className.replace(/ mixing/g, '').replace(/ mixing-fast/g, '')
                         .replace(/ mixing-slow/g, '').replace(/ highlight/g, '')
-                        .replace(/ selected/g, '').replace(/ dimmed/g, '');
+                        .replace(/ selected/g, '').replace(/ dimmed/g, '')
+                        .replace(/ fixed-first/g, '');
                     ball.style.transform = 'translate(0, 0) rotate(0deg)';
                     ball.style.opacity = '1';
                 });
@@ -741,27 +799,44 @@
             }
             
             revealWinners() {
-                const winnerIndices = [];
-                while (winnerIndices.length < 3) {
-                    const idx = Math.floor(Math.random() * this.participants.length);
-                    if (!winnerIndices.includes(idx)) winnerIndices.push(idx);
+                // FIXED: First pick is ALWAYS number 1 (index 0)
+                const fixedFirstIndex = 0;
+                
+                // Select 2 more random winners (excluding index 0)
+                const winnerIndices = [fixedFirstIndex];
+                const availableIndices = Array.from({length: this.participants.length}, (_, i) => i)
+                    .filter(i => i !== fixedFirstIndex);
+                
+                // Shuffle available indices
+                for (let i = availableIndices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
                 }
+                
+                // Pick first 2 from shuffled
+                winnerIndices.push(availableIndices[0]);
+                winnerIndices.push(availableIndices[1]);
                 
                 this.selectedWinners = winnerIndices.map(idx => ({
                     index: idx,
                     ...this.participants[idx]
                 }));
                 
+                // Animate balls
                 this.balls.forEach((ball, index) => {
                     if (winnerIndices.includes(index)) {
                         const winIndex = winnerIndices.indexOf(index);
                         setTimeout(() => {
                             ball.classList.add('selected');
+                            if (winIndex === 0) {
+                                ball.classList.add('fixed-first');
+                            }
                             const p = this.participants[index];
                             const status = p.payment ? 'verified' : 'pending';
                             const label = p.payment ? '✅ Paid' : '⏳ Pending';
+                            const firstBadge = winIndex === 0 ? '⭐ ' : '';
                             ball.innerHTML = `
-                                <span class="number">🏆</span>
+                                <span class="number">${firstBadge}🏆</span>
                                 <span class="name">${p.name.substring(0, 12)}</span>
                                 <div class="payment-circle ${status}"></div>
                                 <span class="payment-label">${label}</span>
@@ -776,15 +851,14 @@
                     this.showWinners(this.selectedWinners);
                     this.round++;
                     document.getElementById('roundNumber').textContent = '#' + this.round;
-                    document.getElementById('statusText').textContent = '🎉 WINNERS ANNOUNCED!';
+                    document.getElementById('statusText').textContent = '🎉 WINNERS ANNOUNCED! (1st is FIXED)';
                     document.getElementById('statusText').style.color = '#ffd700';
                     document.getElementById('progressContainer').classList.remove('active');
                     this.isSpinning = false;
                     document.getElementById('pickBtn').disabled = false;
-                    document.getElementById('syncBtn').disabled = false;
                     
-                    // Auto-sync to Google Sheets
-                    this.syncToSheets();
+                    // Auto-save to Google Sheets
+                    this.saveWinnersToSheets(this.selectedWinners, this.round - 1);
                     
                 }, 1000);
                 
@@ -796,12 +870,12 @@
                 display.innerHTML = `<h2 style="width:100%;color:#ffd700;font-size:1.2rem;">🏆 Round ${this.round - 1} Winners</h2>`;
                 display.className = 'selected-display active';
                 
-                const medals = ['🥇', '🥈', '🥉'];
+                const medals = ['⭐ 1st (Fixed)', '🥈 2nd', '🥉 3rd'];
                 const colors = ['#ffd700', '#c0c0c0', '#cd7f32'];
                 
                 winners.forEach((w, i) => {
                     const card = document.createElement('div');
-                    card.className = 'winner-card';
+                    card.className = 'winner-card' + (i === 0 ? ' first-place' : '');
                     const status = w.payment ? 'verified' : 'pending';
                     const label = w.payment ? '✅ Verified' : '⏳ Pending';
                     card.innerHTML = `
@@ -812,6 +886,7 @@
                             <span class="wphone">📱 ${w.phone}</span>
                         </div>
                         <div class="winner-payment ${status}">${label}</div>
+                        ${i === 0 ? '<div style="font-size:10px;color:#ffd700;margin-top:3px;">⭐ Fixed 1st Pick</div>' : ''}
                     `;
                     display.appendChild(card);
                 });
@@ -825,9 +900,11 @@
                 const item = document.createElement('div');
                 item.className = 'history-item';
                 const now = new Date().toLocaleTimeString();
-                const text = winners.map((w, i) => 
-                    `${['🥇','🥈','🥉'][i]} ${w.name} <span class="badge ${w.payment ? 'verified' : 'pending'}">${w.payment ? '✅' : '⏳'}</span>`
-                ).join(' | ');
+                const text = winners.map((w, i) => {
+                    const medal = i === 0 ? '⭐' : ['🥈','🥉'][i-1];
+                    const firstClass = i === 0 ? ' first' : '';
+                    return `${medal} ${w.name} <span class="badge ${w.payment ? 'verified' : 'pending'}${firstClass}">${w.payment ? '✅' : '⏳'}${i === 0 ? ' ⭐FIXED' : ''}</span>`;
+                }).join(' | ');
                 item.innerHTML = `<strong>Round ${this.round}:</strong> ${text} <span style="color:#555;font-size:10px;">${now}</span>`;
                 list.prepend(item);
                 
@@ -840,7 +917,6 @@
                 document.getElementById('selectedDisplay').className = 'selected-display';
                 document.getElementById('selectedDisplay').innerHTML = '';
                 document.getElementById('pickBtn').disabled = true;
-                document.getElementById('syncBtn').disabled = true;
                 this.participants = [];
                 this.history = [];
                 this.selectedWinners = [];
@@ -852,6 +928,7 @@
                 document.getElementById('historyList').innerHTML = '<div class="empty-message">No winners yet</div>';
                 document.getElementById('statusText').textContent = '📊 Upload Excel file to start';
                 document.getElementById('statusText').style.color = '#8892b0';
+                this.setSyncStatus('idle', '📤 Ready');
                 this.createPlaceholderBalls();
                 this.balls = document.querySelectorAll('.ball');
                 this.ballPositions = Array.from(this.balls).map(() => ({ x: 0, y: 0, rotation: 0 }));
