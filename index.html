@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lottery Picker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .container { max-width: 400px; margin: 0 auto; }
+        .ball { 
+            display: inline-block; 
+            width: 60px; height: 60px; 
+            border-radius: 50%; 
+            text-align: center; 
+            line-height: 60px; 
+            margin: 5px;
+            font-weight: bold;
+            font-size: 24px;
+        }
+        .green-ring {
+            border: 4px solid #6bcb77;
+            box-shadow: 0 0 20px rgba(107,203,119,0.4);
+        }
+        .grey-ring {
+            border: 4px solid #888;
+        }
+        .empty-ring {
+            border: 4px solid transparent;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 18px;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .participant {
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 10px;
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .status-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.green { background: #6bcb77; }
+        .status-dot.grey { background: #888; }
+        .status-dot.empty { background: transparent; border: 2px solid #444; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎰 Lottery Picker</h1>
+        <div id="roundDisplay">Round: #1</div>
+        
+        <div id="participantsList">
+            <p style="color:#666;">Loading participants...</p>
+        </div>
+        
+        <button class="btn" id="drawBtn" disabled>🎲 Draw Winners</button>
+        <button class="btn" id="clearBtn" style="background:#e74c3c;">🗑️ Clear</button>
+        
+        <div id="winnersDisplay" style="margin-top:20px;"></div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const API_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec";
+        let participants = [];
+        let round = 1;
+        
+        // ============================================
+        // TELEGRAM WEB APP API
+        // ============================================
+        function sendToTelegram(data) {
+            if (window.Telegram && Telegram.WebApp) {
+                Telegram.WebApp.sendData(JSON.stringify(data));
+            }
+        }
+        
+        // ============================================
+        // FETCH PARTICIPANTS FROM GOOGLE SHEETS
+        // ============================================
+        async function fetchParticipants() {
+            try {
+                const response = await fetch(API_URL);
+                const result = await response.json();
+                if (result.success) {
+                    participants = result.data;
+                    renderParticipants();
+                    document.getElementById('drawBtn').disabled = false;
+                }
+            } catch (error) {
+                console.error('Error fetching participants:', error);
+            }
+        }
+        
+        // ============================================
+        // RENDER PARTICIPANTS
+        // ============================================
+        function renderParticipants() {
+            const container = document.getElementById('participantsList');
+            container.innerHTML = '';
+            
+            participants.forEach((p, i) => {
+                const div = document.createElement('div');
+                div.className = 'participant';
+                
+                const paymentStatus = p['Payment Status'] || 'Pending';
+                const dotClass = paymentStatus === 'Verified' ? 'green' : 
+                                paymentStatus === 'Pending' ? 'grey' : 'empty';
+                
+                div.innerHTML = `
+                    <span>#${i+1} ${p.Name || 'Unknown'}</span>
+                    <span>📱 ${p.Phone || '-'}</span>
+                    <span class="status-dot ${dotClass}"></span>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        // ============================================
+        // DRAW WINNERS
+        // ============================================
+        function drawWinners() {
+            // Simple random selection - 3 winners
+            const shuffled = [...participants].sort(() => Math.random() - 0.5);
+            const winners = shuffled.slice(0, 3);
+            
+            const container = document.getElementById('winnersDisplay');
+            container.innerHTML = `
+                <h2>🏆 Winners - Round ${round}</h2>
+                <div style="display:flex;gap:15px;justify-content:center;flex-wrap:wrap;">
+                    ${winners.map((w, i) => `
+                        <div style="text-align:center;">
+                            <div class="ball" style="background:${['#ffd700','#c0c0c0','#cd7f32'][i]}">
+                                ${i+1}
+                            </div>
+                            <div>${w.Name || 'Unknown'}</div>
+                            <div style="font-size:12px;color:#888;">${w.Phone || '-'}</div>
+                            <div style="font-size:11px;color:${w['Payment Status'] === 'Verified' ? '#6bcb77' : '#888'};">
+                                ${w['Payment Status'] || 'Pending'}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            round++;
+            document.getElementById('roundDisplay').textContent = `Round: #${round}`;
+            
+            // Send winners to Telegram for history
+            sendToTelegram({ 
+                action: 'winners', 
+                round: round - 1, 
+                winners: winners 
+            });
+        }
+        
+        // ============================================
+        // INIT
+        // ============================================
+        document.getElementById('drawBtn').addEventListener('click', drawWinners);
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            document.getElementById('winnersDisplay').innerHTML = '';
+            sendToTelegram({ action: 'clear' });
+        });
+        
+        // Initialize Telegram Mini App
+        if (window.Telegram && Telegram.WebApp) {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        }
+        
+        fetchParticipants();
+        // Refresh every 30 seconds
+        setInterval(fetchParticipants, 30000);
+    </script>
+</body>
+</html>
