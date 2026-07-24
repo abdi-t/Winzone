@@ -77,32 +77,18 @@
             50% { box-shadow: 0 0 30px rgba(107,203,119,0.6); }
             100% { box-shadow: 0 0 10px rgba(107,203,119,0.3); }
         }
-        
-        .upload-section {
-            background: rgba(255,255,255,0.03);
-            padding: 15px;
-            border-radius: 15px;
-            border: 2px dashed rgba(255,255,255,0.08);
-            margin: 10px 0;
-        }
-        .upload-controls {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        .upload-label {
-            padding: 10px 25px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border-radius: 50px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-        }
-        .upload-label:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(102,126,234,0.3); }
-        #excelFile { display: none; }
+        .sync-section {
+    background: rgba(255,255,255,0.03);
+    padding: 15px 20px;
+    border-radius: 15px;
+    border: 2px solid rgba(255,255,255,0.08);
+    margin: 10px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}      
         
         .stats {
             display: flex;
@@ -400,21 +386,16 @@
             </div>
         </div>
         
-        <div class="upload-section">
-            <div class="upload-controls">
-                <label class="upload-label" for="excelFile">📊 Upload Excel</label>
-                <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
-                <div class="stats">
-                    <div class="stat-item total">Total: <span id="countDisplay">0</span></div>
-                    <div class="stat-item verified">✅ <span id="verifiedDisplay">0</span></div>
-                    <div class="stat-item pending">⏳ <span id="pendingDisplay">0</span></div>
-                </div>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px;margin-top:5px;">
-                <span class="sync-status idle" id="syncStatus">📤 Auto-sync enabled</span>
-                <span style="color:#555;font-size:0.7rem;">Syncing every 30s</span>
-            </div>
-        </div>
+        <div class="sync-section">
+    <div class="stats">
+        <div class="stat-item total">👥 Total: <span id="countDisplay">0</span></div>
+        <div class="stat-item verified">✅ Verified: <span id="verifiedDisplay">0</span></div>
+        <div class="stat-item pending">⏳ Pending: <span id="pendingDisplay">0</span></div>
+    </div>
+    <div>
+        <span class="sync-status idle" id="syncStatus">🔄 Syncing...</span>
+    </div>
+</div>
         
         <div class="ball-container" id="ballContainer"></div>
         
@@ -464,22 +445,23 @@
             }
             
             init() {
-                document.getElementById('excelFile').addEventListener('change', (e) => this.handleFileUpload(e));
-                document.getElementById('pickBtn').addEventListener('click', () => this.startDraw());
-                document.getElementById('clearBtn').addEventListener('click', () => this.clearAll());
-                
-                this.createPlaceholderBalls();
-                this.balls = document.querySelectorAll('.ball');
-                this.ballPositions = Array.from(this.balls).map(() => ({ x: 0, y: 0, rotation: 0 }));
-                
-                // Load from Google Sheets on startup
-                this.loadFromSheets();
-                
-                // Start auto-sync
-                this.startAutoSync();
-                
-                // Setup Telegram
-                this.setupTelegram();
+               init() {
+    document.getElementById('pickBtn').addEventListener('click', () => this.startDraw());
+    document.getElementById('clearBtn').addEventListener('click', () => this.clearAll());
+    
+    this.createPlaceholderBalls();
+    this.balls = document.querySelectorAll('.ball');
+    this.ballPositions = Array.from(this.balls).map(() => ({ x: 0, y: 0, rotation: 0 }));
+    
+    // Load from Google Sheets on startup
+    this.loadFromSheets();
+    
+    // Start auto-sync every 30 seconds
+    this.startAutoSync();
+    
+    // Setup Telegram
+    this.setupTelegram();
+}
             }
             
             // ============================================
@@ -590,54 +572,7 @@
             // ============================================
             // FILE HANDLING
             // ============================================
-            handleFileUpload(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-                
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-                        
-                        this.participants = [];
-                        let verified = 0, pending = 0;
-                        
-                        jsonData.forEach(row => {
-                            if (row[0] && row[1]) {
-                                const payment = row[2] ? String(row[2]).toUpperCase().trim() : 'NO';
-                                const isVerified = payment === 'YES' || payment === 'TRUE' || payment === '1';
-                                this.participants.push({
-                                    name: String(row[0]).trim(),
-                                    phone: String(row[1]).trim(),
-                                    payment: isVerified
-                                });
-                                if (isVerified) verified++;
-                                else pending++;
-                            }
-                        });
-                        
-                        if (this.participants.length < 3) {
-                            alert('Need at least 3 participants!');
-                            return;
-                        }
-                        
-                        this.updateStats();
-                        this.renderBalls();
-                        document.getElementById('pickBtn').disabled = false;
-                        document.getElementById('statusText').textContent = `✅ ${this.participants.length} participants loaded from Excel`;
-                        document.getElementById('statusText').style.color = '#6bcb77';
-                        this.setSyncStatus('success', `✅ ${this.participants.length} loaded from Excel`);
-                        
-                    } catch(error) {
-                        alert('Error reading Excel file.');
-                        console.error(error);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            }
+            
             
             // ============================================
             // RENDER FUNCTIONS
@@ -926,8 +861,7 @@
                 document.getElementById('verifiedDisplay').textContent = '0';
                 document.getElementById('pendingDisplay').textContent = '0';
                 document.getElementById('historyList').innerHTML = '<div class="empty-message">No winners yet</div>';
-                document.getElementById('statusText').textContent = '📊 Upload Excel file to start';
-                document.getElementById('statusText').style.color = '#8892b0';
+                document.getElementById('statusText').textContent = '📊 Connect to Google Sheets for data';                document.getElementById('statusText').style.color = '#8892b0';
                 this.setSyncStatus('idle', '📤 Ready');
                 this.createPlaceholderBalls();
                 this.balls = document.querySelectorAll('.ball');
