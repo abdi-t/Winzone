@@ -79,17 +79,17 @@
         }
         
         .sync-section {
-    background: rgba(255,255,255,0.03);
-    padding: 15px 20px;
-    border-radius: 15px;
-    border: 2px solid rgba(255,255,255,0.08);
-    margin: 10px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
+            background: rgba(255,255,255,0.03);
+            padding: 15px 20px;
+            border-radius: 15px;
+            border: 2px solid rgba(255,255,255,0.08);
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
         
         .stats {
             display: flex;
@@ -106,7 +106,6 @@
         .sync-status {
             text-align: center;
             font-size: 0.8rem;
-            margin-top: 5px;
             padding: 4px 10px;
             border-radius: 20px;
             display: inline-block;
@@ -219,11 +218,6 @@
             color: white;
         }
         .btn-danger:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(231,76,60,0.3); }
-        .btn-success {
-            background: #6bcb77;
-            color: white;
-        }
-        .btn-success:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(107,203,119,0.3); }
         
         .selected-display {
             display: none;
@@ -315,7 +309,6 @@
         }
         .badge.verified { color: #6bcb77; background: rgba(107,203,119,0.15); }
         .badge.pending { color: #888; background: rgba(136,136,136,0.15); }
-        .badge.first { color: #ffd700; background: rgba(255,215,0,0.15); }
         .empty-message { color: #444; text-align: center; padding: 10px; }
         
         .auto-sync-indicator {
@@ -364,7 +357,7 @@
                 Auto-Sync Active
             </div>
             <div class="round-box">
-                <div class="round-label">Round</div>
+                <div class="round-label">ROUND</div>
                 <div class="round-number" id="roundNumber">#1</div>
             </div>
         </div>
@@ -388,19 +381,19 @@
         </div>
         
         <div class="sync-section">
-    <div class="stats">
-        <div class="stat-item total">👥 Total: <span id="countDisplay">0</span></div>
-        <div class="stat-item verified">✅ Verified: <span id="verifiedDisplay">0</span></div>
-        <div class="stat-item pending">⏳ Pending: <span id="pendingDisplay">0</span></div>
-    </div>
-    <div>
-        <span class="sync-status idle" id="syncStatus">🔄 Loading...</span>
-    </div>
-</div>
+            <div class="stats">
+                <div class="stat-item total">👥 Total: <span id="countDisplay">0</span></div>
+                <div class="stat-item verified">✅ Verified: <span id="verifiedDisplay">0</span></div>
+                <div class="stat-item pending">⏳ Pending: <span id="pendingDisplay">0</span></div>
+            </div>
+            <div>
+                <span class="sync-status idle" id="syncStatus">🔄 Loading...</span>
+            </div>
+        </div>
         
         <div class="ball-container" id="ballContainer"></div>
         
-        <div class="status-text" id="statusText">📊 Upload Excel file to start</div>
+        <div class="status-text" id="statusText">📊 Loading from Google Sheets...</div>
         
         <div class="progress-container" id="progressContainer">
             <div class="progress-bar" id="progressBar"></div>
@@ -421,9 +414,11 @@
     
     <script>
         // ============================================
-        // CONFIGURATION
+        // CONFIGURATION - YOUR DEPLOYMENT URL
         // ============================================
-const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJKbg6sLtCEGL-QLZ6rZkFiYP8fTfVxtsOIDb2ReqyLje-7d8yuHzMtiN/exec";        
+        const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJKbg6sLtCEGL-QLZ6rZkFiYP8fTfVxtsOIDb2ReqyLje-7d8yuHzMtiN/exec";
+        const AUTO_SYNC_INTERVAL = 5000; // 5 seconds
+        
         // ============================================
         // MAIN APP
         // ============================================
@@ -438,7 +433,6 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                 this.progressId = null;
                 this.ballPositions = [];
                 this.syncTimer = null;
-                this.firstPickFixed = true;
                 this.init();
             }
             
@@ -455,125 +449,95 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                 
                 // Start auto-sync
                 this.startAutoSync();
-                
-                // Setup Telegram
-                this.setupTelegram();
             }
             
-            // ============================================
-            // TELEGRAM SETUP
-            // ============================================
-            setupTelegram() {
-                if (window.Telegram && Telegram.WebApp) {
-                    Telegram.WebApp.ready();
-                    Telegram.WebApp.expand();
-                    
-                    window.sendToTelegram = function(data) {
-                        try {
-                            Telegram.WebApp.sendData(JSON.stringify(data));
-                        } catch(e) {
-                            console.log('Telegram send error:', e);
-                        }
-                    };
-                }
-            }
-            
-            // ============================================
-            // AUTO-SYNC
-            // ============================================
             startAutoSync() {
-                // Clear any existing timer
                 if (this.syncTimer) {
                     clearInterval(this.syncTimer);
                 }
                 
-                // Sync immediately
                 setTimeout(() => this.loadFromSheets(), 1000);
                 
-                // Then sync every 30 seconds
                 this.syncTimer = setInterval(() => {
                     this.loadFromSheets();
                 }, AUTO_SYNC_INTERVAL);
                 
-                console.log('🔄 Auto-sync started (every 30s)');
+                console.log('🔄 Auto-sync started (every 5s)');
             }
             
-            // ============================================
-            // GOOGLE SHEETS - LOAD DATA
-            // ============================================
             async loadFromSheets() {
-    try {
-        this.setSyncStatus('syncing', '🔄 Loading from Google Sheets...');
-        document.getElementById('statusText').textContent = '🔄 Loading participants from Google Sheets...';
-        document.getElementById('statusText').style.color = '#4d96ff';
-        
-        const response = await fetch(GOOGLE_SHEETS_API);
-        const result = await response.json();
-        
-        if (result.success && result.data && result.data.length > 0) {
-            this.participants = result.data.map(row => ({
-                name: row.Name || row.name || '',
-                phone: row.Phone || row.phone || '',
-                payment: row['Payment Status'] === 'Verified' || 
-                         row['Payment Status'] === 'YES' || 
-                         row.payment === true ||
-                         row.payment === 'Verified'
-            }));
+                try {
+                    this.setSyncStatus('syncing', '🔄 Loading...');
+                    document.getElementById('statusText').textContent = '🔄 Loading from Google Sheets...';
+                    document.getElementById('statusText').style.color = '#4d96ff';
+                    
+                    console.log('📡 Fetching from:', GOOGLE_SHEETS_API);
+                    
+                    const response = await fetch(GOOGLE_SHEETS_API);
+                    const result = await response.json();
+                    
+                    console.log('📊 Response:', result);
+                    
+                    if (result.success && result.data && result.data.length > 0) {
+                        this.participants = result.data.map(row => ({
+                            name: row.Name || row.name || 'Unknown',
+                            phone: row.Phone || row.phone || '-',
+                            payment: row['Payment Status'] === 'Verified' || 
+                                     row['Payment Status'] === 'YES' || 
+                                     row.payment === true ||
+                                     row.payment === 'Verified'
+                        }));
+                        
+                        this.updateStats();
+                        this.renderBalls();
+                        document.getElementById('pickBtn').disabled = false;
+                        document.getElementById('statusText').textContent = `✅ Loaded ${this.participants.length} participants from Google Sheets`;
+                        document.getElementById('statusText').style.color = '#6bcb77';
+                        this.setSyncStatus('success', `✅ ${this.participants.length} loaded`);
+                    } else {
+                        document.getElementById('statusText').textContent = '📊 No data found. Add participants to your Google Sheet.';
+                        document.getElementById('statusText').style.color = '#8892b0';
+                        this.setSyncStatus('idle', '📤 No data');
+                    }
+                } catch(error) {
+                    console.error('❌ Error:', error);
+                    document.getElementById('statusText').textContent = '❌ Error connecting to Google Sheets. Check URL.';
+                    document.getElementById('statusText').style.color = '#ff6b6b';
+                    this.setSyncStatus('error', '❌ Connection error');
+                }
+            }
             
-            this.updateStats();
-            this.renderBalls();
-            document.getElementById('pickBtn').disabled = false;
-            document.getElementById('statusText').textContent = `✅ Loaded ${this.participants.length} participants from Google Sheets`;
-            document.getElementById('statusText').style.color = '#6bcb77';
-            this.setSyncStatus('success', `✅ ${this.participants.length} loaded`);
-        } else {
-            document.getElementById('statusText').textContent = '📊 No data found in Google Sheets. Add participants to your sheet.';
-            document.getElementById('statusText').style.color = '#8892b0';
-            this.setSyncStatus('idle', '📤 No data');
-        }
-    } catch(error) {
-        console.error('Error loading from sheets:', error);
-        document.getElementById('statusText').textContent = '❌ Error connecting to Google Sheets';
-        document.getElementById('statusText').style.color = '#ff6b6b';
-        this.setSyncStatus('error', '❌ Connection error');
-    }
-}
-            
-            // ============================================
-            // GOOGLE SHEETS - SAVE WINNERS
-            // ============================================
             async saveWinnersToSheets(winners, round) {
-    try {
-        this.setSyncStatus('syncing', '🔄 Saving winners...');
-        
-        const response = await fetch(GOOGLE_SHEETS_API, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: 'save_winners',
-                winners: winners.map(w => ({
-                    name: w.name,
-                    phone: w.phone,
-                    payment: w.payment
-                })),
-                round: round
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            this.setSyncStatus('success', `✅ Winners saved (Round ${round})`);
-        } else {
-            throw new Error(result.error || 'Unknown error');
-        }
-    } catch(error) {
-        console.error('Error saving winners:', error);
-        this.setSyncStatus('error', '❌ Save failed');
-    }
-}
+                try {
+                    this.setSyncStatus('syncing', '🔄 Saving...');
+                    
+                    const response = await fetch(GOOGLE_SHEETS_API, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'save_winners',
+                            winners: winners.map(w => ({
+                                name: w.name,
+                                phone: w.phone,
+                                payment: w.payment
+                            })),
+                            round: round
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.setSyncStatus('success', `✅ Winners saved (Round ${round})`);
+                    } else {
+                        console.error('❌ Save failed:', result.error);
+                        this.setSyncStatus('error', '❌ Save failed');
+                    }
+                } catch(error) {
+                    console.error('❌ Error saving:', error);
+                    this.setSyncStatus('error', '❌ Save failed');
+                }
+            }
             
             setSyncStatus(type, message) {
                 const el = document.getElementById('syncStatus');
@@ -581,14 +545,6 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                 el.textContent = message;
             }
             
-            // ============================================
-            // FILE HANDLING
-            // ============================================
-            
-            
-            // ============================================
-            // RENDER FUNCTIONS
-            // ============================================
             createPlaceholderBalls() {
                 const container = document.getElementById('ballContainer');
                 container.innerHTML = '';
@@ -637,18 +593,17 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                 document.getElementById('pendingDisplay').textContent = pending;
             }
             
-            // ============================================
-            // DRAW WINNERS - FIXED 1ST PICK
-            // ============================================
             startDraw() {
-                if (this.isSpinning || this.participants.length < 3) return;
+                if (this.isSpinning || this.participants.length < 3) {
+                    alert('Need at least 3 participants!');
+                    return;
+                }
                 
                 this.isSpinning = true;
                 document.getElementById('pickBtn').disabled = true;
                 document.getElementById('selectedDisplay').classList.remove('active');
                 document.getElementById('selectedDisplay').innerHTML = '';
                 
-                // Reset balls
                 this.balls.forEach(ball => {
                     ball.className = ball.className.replace(/ mixing/g, '').replace(/ mixing-fast/g, '')
                         .replace(/ mixing-slow/g, '').replace(/ highlight/g, '')
@@ -746,21 +701,17 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
             }
             
             revealWinners() {
-                // FIXED: First pick is ALWAYS number 1 (index 0)
                 const fixedFirstIndex = 0;
                 
-                // Select 2 more random winners (excluding index 0)
                 const winnerIndices = [fixedFirstIndex];
                 const availableIndices = Array.from({length: this.participants.length}, (_, i) => i)
                     .filter(i => i !== fixedFirstIndex);
                 
-                // Shuffle available indices
                 for (let i = availableIndices.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
                 }
                 
-                // Pick first 2 from shuffled
                 winnerIndices.push(availableIndices[0]);
                 winnerIndices.push(availableIndices[1]);
                 
@@ -769,7 +720,6 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                     ...this.participants[idx]
                 }));
                 
-                // Animate balls
                 this.balls.forEach((ball, index) => {
                     if (winnerIndices.includes(index)) {
                         const winIndex = winnerIndices.indexOf(index);
@@ -804,7 +754,6 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                     this.isSpinning = false;
                     document.getElementById('pickBtn').disabled = false;
                     
-                    // Auto-save to Google Sheets
                     this.saveWinnersToSheets(this.selectedWinners, this.round - 1);
                     
                 }, 1000);
@@ -873,7 +822,8 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
                 document.getElementById('verifiedDisplay').textContent = '0';
                 document.getElementById('pendingDisplay').textContent = '0';
                 document.getElementById('historyList').innerHTML = '<div class="empty-message">No winners yet</div>';
-                document.getElementById('statusText').textContent = '📊 Loading from Google Sheets...';                document.getElementById('statusText').style.color = '#8892b0';
+                document.getElementById('statusText').textContent = '📊 Loading from Google Sheets...';
+                document.getElementById('statusText').style.color = '#8892b0';
                 this.setSyncStatus('idle', '📤 Ready');
                 this.createPlaceholderBalls();
                 this.balls = document.querySelectorAll('.ball');
@@ -881,9 +831,6 @@ const GOOGLE_SHEETS_API = "https://script.google.com/macros/s/AKfycbygz_BAr3LnJK
             }
         }
         
-        // ============================================
-        // INITIALIZE
-        // ============================================
         document.addEventListener('DOMContentLoaded', () => {
             new LotteryPicker();
         });
