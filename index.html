@@ -424,62 +424,90 @@
             });
         }
 
-        // ============================================
-        // SUBMIT REGISTRATION
-        // ============================================
-        async function submitRegistration() {
-            const name = document.getElementById('regName').value.trim();
-            const phone = document.getElementById('regPhone').value.trim();
-            const payment = getSelectedPayment();
+// ============================================
+// SUBMIT REGISTRATION - DEBUG VERSION
+// ============================================
+async function submitRegistration() {
+    const name = document.getElementById('regName').value.trim();
+    const phone = document.getElementById('regPhone').value.trim();
+    const payment = getSelectedPayment();
+    
+    console.log('🔍 DEBUG - Starting registration...');
+    console.log('📝 Name:', name);
+    console.log('📱 Phone:', phone);
+    console.log('💳 Payment:', payment);
+    console.log('🎯 Number:', selectedCardNumber);
+    console.log('📡 API URL:', GOOGLE_SHEETS_API);
+    
+    if (!name || !phone) {
+        showCardboxStatus('Please enter your full name and phone number!', 'error');
+        return;
+    }
+    
+    if (!selectedCardNumber) {
+        showCardboxStatus('No number selected!', 'error');
+        return;
+    }
+    
+    try {
+        const btn = document.querySelector('#stepRegister .btn-submit');
+        btn.disabled = true;
+        btn.textContent = '⏳ Registering...';
+        
+        const payload = {
+            action: 'register_number',
+            number: selectedCardNumber,
+            name: name,
+            phone: phone,
+            payment: payment
+        };
+        
+        console.log('📤 Sending payload:', payload);
+        
+        const response = await fetch(GOOGLE_SHEETS_API, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        
+        console.log('📥 Response status:', response.status);
+        
+        const result = await response.json();
+        console.log('📊 Result:', result);
+        
+        if (result.success) {
+            showCardboxStatus(`✅ Registered! Now complete payment for number ${selectedCardNumber}`, 'success');
+            document.getElementById('stepRegister').style.display = 'none';
+            document.getElementById('stepPayment').style.display = 'block';
+            updatePaymentInfo(payment);
             
-            if (!name || !phone) {
-                showCardboxStatus('Please enter your full name and phone number!', 'error');
-                return;
+            // Update local data
+            const n = numbers.find(n => n.number === selectedCardNumber);
+            if (n) {
+                n.status = 'pending';
+                n.name = name;
+                n.phone = phone;
+                n.payment = payment;
             }
+            renderBalls();
+            updateStats();
             
-            if (!selectedCardNumber) {
-                showCardboxStatus('No number selected!', 'error');
-                return;
-            }
-            
-            try {
-                const btn = document.querySelector('#stepRegister .btn-submit');
-                btn.disabled = true;
-                btn.textContent = '⏳ Registering...';
-                
-                const response = await fetch(GOOGLE_SHEETS_API, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'register_number',
-                        number: selectedCardNumber,
-                        name: name,
-                        phone: phone,
-                        payment: payment
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showCardboxStatus(`✅ Registered! Now complete payment for number ${selectedCardNumber}`, 'success');
-                    document.getElementById('stepRegister').style.display = 'none';
-                    document.getElementById('stepPayment').style.display = 'block';
-                    updatePaymentInfo(payment);
-                    btn.textContent = '📝 Register & Continue';
-                    btn.disabled = false;
-                } else {
-                    showCardboxStatus('❌ Registration failed: ' + (result.error || 'Unknown error'), 'error');
-                    btn.textContent = '📝 Register & Continue';
-                    btn.disabled = false;
-                }
-            } catch(error) {
-                console.error('Register error:', error);
-                showCardboxStatus('❌ Error registering. Please try again.', 'error');
-                document.querySelector('#stepRegister .btn-submit').textContent = '📝 Register & Continue';
-                document.querySelector('#stepRegister .btn-submit').disabled = false;
-            }
+            btn.textContent = '📝 Register & Continue';
+            btn.disabled = false;
+        } else {
+            showCardboxStatus('❌ Registration failed: ' + (result.error || 'Unknown error'), 'error');
+            btn.textContent = '📝 Register & Continue';
+            btn.disabled = false;
         }
+    } catch(error) {
+        console.error('❌ ERROR:', error);
+        showCardboxStatus('❌ Error: ' + error.message, 'error');
+        document.querySelector('#stepRegister .btn-submit').textContent = '📝 Register & Continue';
+        document.querySelector('#stepRegister .btn-submit').disabled = false;
+    }
+}
 
         // ============================================
         // SUBMIT PAYMENT
